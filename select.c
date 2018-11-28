@@ -1,16 +1,24 @@
 /*******select.c*********/
 /*******Using select() for I/O multiplexing */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<unistd.h>
+#include<pthread.h>
+#include<time.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <sys/stat.h>
+#include"sds.h"
+#include"sdsalloc.h"
 /* port we're listening on */
 #define PORT 8080
- 
+
+int findFileSize(FILE *arq);
+int file_exist(char*);
+void lidaComHTTP(int sock);
+
 int main(int argc, char *argv[])
 {
     /* master file descriptor list */
@@ -115,6 +123,7 @@ int main(int argc, char *argv[])
                         { /* keep track of the maximum */
                             fdmax = newfd;
                         }
+                        lidaComHTTP(newfd);
                         printf("%s: New connection from %s on socket %d\n", argv[0], inet_ntoa(clientaddr.sin_addr), newfd);
                     }
                 }
@@ -158,4 +167,119 @@ int main(int argc, char *argv[])
         }
     }
     return 0;
+}
+
+void lidaComHTTP(int sock){
+
+    int read_size;
+    char menssagem_cliente[2000];
+    sds resposta;
+    if( (read_size = recv(sock , menssagem_cliente , 2000 , 0)) <= 0 ){ //escuta no sock para receber msg do cliente
+       perror("falha ao receber dados do cliente");
+    }
+    menssagem_cliente[read_size]='\0';
+    printf("%s\n", menssagem_cliente);
+
+    printf("------------------Resposta-----------------------\n");
+    
+    int tokens_size;
+    int aux, fileSize, type_size;
+
+    sds xablau = sdsnew(menssagem_cliente);
+    sds *tokens = sdssplitlen(xablau, sdslen(xablau), " ", 1, &tokens_size);
+
+    if(strcmp("GET", tokens[0]) != 0){
+        resposta = sdsnew("HTTP/1.1 501 Not Implemented\r\n");
+        send(sock, resposta, strlen(resposta), 0);
+        return;
+    }
+
+    sds *tipo = sdssplitlen(tokens[2], sdslen(tokens[2]), "\r\n", 1, &aux);
+
+    if(strcmp("HTTP/1.1", tipo[0]) != 0){
+        resposta = sdsnew("HTTP/1.1 505 HTTP Version Not Supported\r\n");
+        send(sock, resposta, strlen(resposta), 0);
+        return;
+    }
+    sdstrim(tokens[1], "/");
+
+    if (!file_exist(tokens[1])){
+       resposta = sdsnew("HTTP/1.1 404 Not Found\r\n");
+       send(sock, resposta, strlen(resposta), 0);
+       return;
+    }
+
+    FILE *arq = fopen(tokens[1], "rb");
+    fileSize = findFileSize(arq);
+
+    resposta = sdsnew("HTTP/1.1 200 OK\r\n");
+    
+    resposta = sdscatprintf(resposta, "Content-Length: %d\r\n", fileSize);
+
+    sds *type = sdssplitlen(tokens[1], sdslen(tokens[1]), ".", 1, &aux);
+
+    if (strcmp(type[1], "html") == 0 || strcmp(type[1], "htm") == 0){
+        resposta = sdscat(resposta, "Content-Type: text/html\r\n"); 
+    }
+    if (strcmp(type[1], "jpg") == 0 || strcmp(type[1], "jpeg") == 0){
+        resposta = sdscat(resposta, "Content-Type: image/jpeg\r\n"); 
+    }
+    if (strcmp(type[1], "gif") == 0){
+        resposta = sdscat(resposta, "Content-Type: image/gif\r\n");
+    }
+    if (strcmp(type[1], "png") == 0){
+        resposta = sdscat(resposta, "Content-Type: image/png\r\n");
+    }
+    if (strcmp(type[1], "css") == 0){
+        resposta = sdscat(resposta, "Content-Type: text/css\r\n");
+    }
+    if (strcmp(type[1], "au") == 0){
+        resposta = sdscat(resposta, "Content-Type: audio/basic\r\n");
+    }
+    if (strcmp(type[1], "wav") == 0){
+        resposta = sdscat(resposta, "Content-Type: audio/wav\r\n");
+    }
+    if (strcmp(type[1], "avi") == 0){
+        resposta = sdscat(resposta, "Content-Type: video/x-msvideo\r\n");
+    }
+    if (strcmp(type[1], "mpeg") == 0 || strcmp(type[1], "mpg") == 0){
+        resposta = sdscat(resposta, "Content-Type: video/mpeg\r\n");
+    }
+    if (strcmp(type[1], "mp3") == 0){
+        resposta = sdscat(resposta, "Content-Type: audio/mpeg\r\n");
+    }
+    if (strcmp(type[1], "js") == 0){
+        resposta = sdscat(resposta, "Content-Type: text/javascript\r\n");
+    }
+    if (strcmp(type[1], "ico") == 0){
+        resposta = sdscat(resposta, "Content-Type: image/x-icon\r\n");
+    }
+
+    resposta = sdscat(resposta, "Connection: close\r\n\r\n");
+
+    printf("%s\n", resposta);
+    send(sock, resposta, strlen(resposta), 0);
+
+
+    char *buffer = malloc(fileSize*sizeof(char));
+    fread(buffer, 1, fileSize, arq);
+    send(sock, buffer, fileSize, 0);
+    fclose(arq);
+    free(buffer);
+    
+    printf("------------------------FIM--------------------------\n");
+
+    return;
+}
+
+int findFileSize(FILE *arq){
+
+    struct stat size;
+    fstat(fileno(arq), &size);
+    return size.st_size;
+}
+
+int file_exist (char *filename){
+  struct stat buffer;   
+  return (stat (filename, &buffer) == 0);
 }

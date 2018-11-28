@@ -22,7 +22,6 @@ int main(int argc , char *argv[]){
     struct sockaddr_in server , client;
     
     
-    
     //cria um socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
     if (socket_desc == -1){
@@ -75,7 +74,7 @@ void lidaComHTTP(int sock){
     int read_size;
     char menssagem_cliente[2000];
     sds resposta;
-    if( (read_size = recv(sock , menssagem_cliente , 2000 , 0)) < 0 ){ //escuta no sock para receber msg do cliente
+    if( (read_size = recv(sock , menssagem_cliente , 2000 , 0)) <= 0 ){ //escuta no sock para receber msg do cliente
        perror("falha ao receber dados do cliente");
     }
     menssagem_cliente[read_size]='\0';
@@ -92,6 +91,7 @@ void lidaComHTTP(int sock){
     if(strcmp("GET", tokens[0]) != 0){
         resposta = sdsnew("HTTP/1.1 501 Not Implemented\r\n");
         send(sock, resposta, strlen(resposta), 0);
+        return;
     }
 
     sds *tipo = sdssplitlen(tokens[2], sdslen(tokens[2]), "\r\n", 1, &aux);
@@ -99,12 +99,14 @@ void lidaComHTTP(int sock){
     if(strcmp("HTTP/1.1", tipo[0]) != 0){
         resposta = sdsnew("HTTP/1.1 505 HTTP Version Not Supported\r\n");
         send(sock, resposta, strlen(resposta), 0);
+        return;
     }
     sdstrim(tokens[1], "/");
 
     if (!file_exist(tokens[1])){
        resposta = sdsnew("HTTP/1.1 404 Not Found\r\n");
        send(sock, resposta, strlen(resposta), 0);
+       return;
     }
 
     FILE *arq = fopen(tokens[1], "rb");

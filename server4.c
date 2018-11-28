@@ -1,3 +1,5 @@
+/*******select.c*********/
+/*******Using select() for I/O multiplexing */
 #include<stdio.h>
 #include<string.h>
 #include<stdlib.h>
@@ -10,98 +12,137 @@
 #include <sys/stat.h>
 #include"sds.h"
 #include"sdsalloc.h"
-#include"fila.h"
+/* port we're listening on */
+#define PORT 8080
 
-void *nova_conexao(void *);
-char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
-int file_exist (char *filename);
+int file_exist(char*);
 void lidaComHTTP(int sock);
-static void *lidaComHTTP_thread(void *arg);
 
+int main(int argc, char *argv[])
+{
+    /* master file descriptor list */
+    fd_set master;
+    /* temp file descriptor list for select() */
+    fd_set read_fds;
+    /* server address */
+    struct sockaddr_in serveraddr;
+    /* client address */
+    struct sockaddr_in clientaddr;
+    /* maximum file descriptor number */
+    int fdmax;
+    /* listening socket descriptor */
+    int listener;
+    /* newly accept()ed socket descriptor */
+    int newfd;
+    /* buffer for client data */
+    char buf[1024];
+    int nbytes;
+    /* for setsockopt() SO_REUSEADDR, below */
+    int yes = 1;
+    int addrlen;
+    int i, j;
+    /* clear the master and temp sets */
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
 
-pthread_mutex_t lock;
-Fila *fila;
-int main(int argc , char *argv[]){
-    //declaracao de variaveis
-    int socket_desc , c , *new_sock;
-    struct sockaddr_in server , client;
-    
-    //cria um socket
-    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
-    if (socket_desc == -1){
-        printf("Nao foi possivel criar socket");
+    /* get the listener */
+    if((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        perror("Server-socket() error lol!");
+        /*just exit lol!*/
+        exit(1);
     }
-    puts("Socket criado");
-
-    //criacao do servidor
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( atoi(argv[1]) );
-
-    //ligando o socket ao servidor
-    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0){
-        perror("Erro");
-        return 1;
+    printf("Server-socket() is OK...\n");
+    /*"address already in use" error message */
+    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+    {
+        perror("Server-setsockopt() error lol!");
+        exit(1);
     }
-    puts("ligacao feita");
+    printf("Server-setsockopt() is OK...\n");
 
-    //seta o socket para aceitar conexoes
-    listen(socket_desc , 10);
+    /* bind */
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = INADDR_ANY;
+    serveraddr.sin_port = htons(PORT);
+    memset(&(serveraddr.sin_zero), '\0', 8);
 
-    puts("Esperando por conexoes...");
-    c = sizeof(struct sockaddr_in);
-    
-
-    int *client_sock;
-    
-
-    fila = criafila(200);
-    
-    
-
-    if (pthread_mutex_init(&lock, NULL) != 0){
-        printf("\n mutex init failed\n");
-        return 1;
+    if(bind(listener, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1)
+    {
+        perror("Server-bind() error lol!");
+        exit(1);
     }
-    int j = 0;
-    while(1){
-        client_sock = (int *) malloc(sizeof(int));
-        *client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c); /* iptr aceita a escuta do cliente */
-        //printf(" sock %d\n", *client_sock);
+    printf("Server-bind() is OK...\n");
 
-        Item_fila *i;
-        i = novo_item_fila();
-        i->sock = client_sock;
-        pthread_t thread[5]; //declaração da thread
-        insere(fila, i);
-
-        
-        pthread_create(&(thread[j]), NULL, &lidaComHTTP_thread, fila->items[fila->primeiro].sock);   
-         
-        desenfilera(fila);
-        j++;
-        if (j == 5) j = 0;
+    /* listen */
+    if(listen(listener, 10) == -1)
+    {
+        perror("Server-listen() error lol!");
+        exit(1);
     }
-    pthread_mutex_destroy(&lock);
-    deleta_fila(fila);
+    printf("Server-listen() is OK...\n");
+
+    /* add the listener to the master set */
+    FD_SET(listener, &master);
+    /* keep track of the biggest file descriptor */
+    fdmax = listener; /* so far, it's this one*/
+
+    /* loop */
+    for(;;)
+    {
+        /* copy it */
+        read_fds = master;
+
+        if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1)
+        {
+            perror("Server-select() error lol!");
+            exit(1);
+        }
+        printf("Server-select() is OK...\n");
+
+        /*run through the existing connections looking for data to be read*/
+        for(i = 0; i <= fdmax; i++)
+        {
+            if(FD_ISSET(i, &read_fds))
+            { /* we got one... */
+                if(i == listener)
+                {
+                    /* handle new connections */
+                    addrlen = sizeof(clientaddr);
+                    if((newfd = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1)
+                    {
+                        perror("Server-accept() error lol!");
+                    }
+                    else
+                    {
+                        printf("Server-accept() is OK...\n");
+
+                        FD_SET(newfd, &master); /* add to master set */
+                        if(newfd > fdmax)
+                        { /* keep track of the maximum */
+                            fdmax = newfd;
+                        }
+                        printf("%s: New connection from %s on socket %d\n", argv[0], inet_ntoa(clientaddr.sin_addr), newfd);
+                        
+                    }
+                }
+                else
+                {
+                    lidaComHTTP(i);
+                    /* close it... */
+                    close(i);
+                    /* remove from master set */
+                    FD_CLR(i, &master);
+                }
+            }
+        }
+    }
     return 0;
 }
 
-static void *lidaComHTTP_thread(void *arg){
-    pthread_mutex_lock(&lock);
-    int sock;
-
-    sock = *((int *) arg);
-    pthread_detach(pthread_self());
-    lidaComHTTP(sock);
-    close(sock);
-    
-    pthread_mutex_unlock(&lock);
-    return NULL;
-}
-
 void lidaComHTTP(int sock){
+
     int read_size;
     char menssagem_cliente[2000];
     sds resposta;
@@ -132,12 +173,11 @@ void lidaComHTTP(int sock){
         send(sock, resposta, strlen(resposta), 0);
         return;
     }
- 
     sdstrim(tokens[1], "/");
-    
 
     if (!file_exist(tokens[1])){
        resposta = sdsnew("HTTP/1.1 404 Not Found\r\n");
+       printf("%s\n", resposta);
        send(sock, resposta, strlen(resposta), 0);
        return;
     }
@@ -204,7 +244,6 @@ void lidaComHTTP(int sock){
 
     return;
 }
-
 
 int findFileSize(FILE *arq){
 
