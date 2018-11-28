@@ -15,7 +15,7 @@ void *nova_conexao(void *);
 char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
 int file_exist (char *filename);
-void execucao(int sock);
+void lidaComHTTP(int sock);
 static void *execucao_thread(void *arg);
 
 int main(int argc , char *argv[]){
@@ -66,13 +66,13 @@ static void *execucao_thread(void *arg){
 
     sock = *((int *) arg);
     pthread_detach(pthread_self());
-    execucao(sock);
+    lidaComHTTP(sock);
     close(sock);
 
     return NULL;
 }
 
-void execucao(int sock){
+void lidaComHTTP(int sock){
 
     int read_size;
     char menssagem_cliente[2000];

@@ -10,18 +10,22 @@
 #include <sys/stat.h>
 #include"sds.h"
 #include"sdsalloc.h"
+#include"fila.h"
 
 void *nova_conexao(void *);
+char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
-int file_exist(char*);
+int file_exist (char *filename);
 void lidaComHTTP(int sock);
+static void *lidaComHTTP_thread(void *arg);
 
+
+pthread_mutex_t lock;
+Fila *fila;
 int main(int argc , char *argv[]){
     //declaracao de variaveis
     int socket_desc , c , *new_sock;
     struct sockaddr_in server , client;
-    
-    
     
     //cria um socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -43,35 +47,61 @@ int main(int argc , char *argv[]){
     puts("ligacao feita");
 
     //seta o socket para aceitar conexoes
-    listen(socket_desc , 3);
+    listen(socket_desc , 10);
 
     puts("Esperando por conexoes...");
     c = sizeof(struct sockaddr_in);
-  
-    while(1){
-        int client_sock;
-        //aceita uma nova conexão e atribui ao client_sock[i] o endereço do socket onde ocorrerá a comunicação
-        if( client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c) ){
-            puts("Conexao aceita");
-        }
-
-        if (client_sock < 0){
-            perror("Falhou");
-            return 1;
-        }
-
-        lidaComHTTP(client_sock);
-        close(client_sock);
-       
-    }
-
     
 
+    int *client_sock;
+    
+
+    fila = criafila(200);
+    
+    
+
+    if (pthread_mutex_init(&lock, NULL) != 0){
+        printf("\n mutex init failed\n");
+        return 1;
+    }
+    int j = 0;
+    while(1){
+        client_sock = (int *) malloc(sizeof(int));
+        *client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c); /* iptr aceita a escuta do cliente */
+        //printf(" sock %d\n", *client_sock);
+
+        Item_fila *i;
+        i = novo_item_fila();
+        i->sock = client_sock;
+        pthread_t thread[5]; //declaração da thread
+        insere(fila, i);
+
+        
+        pthread_create(&(thread[j]), NULL, &lidaComHTTP_thread, fila->items[fila->primeiro].sock);   
+         
+        desenfilera(fila);
+        j++;
+        if (j == 5) j = 0;
+    }
+    pthread_mutex_destroy(&lock);
+    deleta_fila(fila);
     return 0;
 }
 
-void lidaComHTTP(int sock){
+static void *lidaComHTTP_thread(void *arg){
+    pthread_mutex_lock(&lock);
+    int sock;
 
+    sock = *((int *) arg);
+    pthread_detach(pthread_self());
+    lidaComHTTP(sock);
+    close(sock);
+    
+    pthread_mutex_unlock(&lock);
+    return NULL;
+}
+
+void lidaComHTTP(int sock){
     int read_size;
     char menssagem_cliente[2000];
     sds resposta;
@@ -100,7 +130,9 @@ void lidaComHTTP(int sock){
         resposta = sdsnew("HTTP/1.1 505 HTTP Version Not Supported\r\n");
         send(sock, resposta, strlen(resposta), 0);
     }
+ 
     sdstrim(tokens[1], "/");
+    
 
     if (!file_exist(tokens[1])){
        resposta = sdsnew("HTTP/1.1 404 Not Found\r\n");
@@ -169,6 +201,7 @@ void lidaComHTTP(int sock){
 
     return;
 }
+
 
 int findFileSize(FILE *arq){
 

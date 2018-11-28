@@ -4,5 +4,8 @@ server1:	server1.c	sds.c
 server2:	server2.c	sds.c
 	gcc server2.c sds.c -pthread -o server2
 
+server3:	server3.c	sds.c	fila.c
+	gcc server3.c sds.c fila.c -pthread -o server3
+
 clean: server1
 	rm -rf server1
