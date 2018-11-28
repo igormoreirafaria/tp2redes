@@ -35,7 +35,7 @@ int fila_vazia(Fila *f){
 }
 
 void desenfilera(Fila *f){
-	printf("desenfilera\n");
+	
 	f->primeiro++;
 	f->cont--;
 	if(f->primeiro == f->tamanho){
