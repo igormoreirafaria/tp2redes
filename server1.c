@@ -6,12 +6,15 @@
 #include<unistd.h>
 #include<pthread.h>
 #include<time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include"sds.h"
 #include"sdsalloc.h"
 
 void *nova_conexao(void *);
-char *tratahttp(char *menssagem_cliente);
+char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
+int file_exist(char*);
 
 int main(int argc , char *argv[]){
     //declaracao de variaveis
@@ -70,9 +73,10 @@ int main(int argc , char *argv[]){
 
             printf("------------------Resposta-----------------------\n");
 
-            resposta = tratahttp(menssagem_cliente);
+            resposta = tratahttp(menssagem_cliente, client_sock);
+            
+            printf("--------------------------------------------------\n");
 
-            write(client_sock , resposta , strlen(resposta));
         }
 
         if(read_size == 0){  //identifica se o cliente ainda está conectado
@@ -82,7 +86,7 @@ int main(int argc , char *argv[]){
         else if(read_size == -1){ //identifica se houve erro ao receber a mensagem do cliente
             perror("Recebimento falhou");
         }
-        close(client_sock);
+        
         puts("conexao encerrada");
        
 
@@ -93,7 +97,7 @@ int main(int argc , char *argv[]){
     return 0;
 }
 
-char* tratahttp(char *menssagem_cliente){
+char* tratahttp(char *menssagem_cliente, int client_sock){
 
     int tokens_size;
     int aux, fileSize, type_size;
@@ -112,16 +116,17 @@ char* tratahttp(char *menssagem_cliente){
     }
     sdstrim(tokens[1], "/");
 
-    FILE *arq = fopen(tokens[1], "rb");
+    
      
-    if (arq == NULL){
+    if (!file_exist(tokens[1])){
         return sdsnew("HTTP/1.1 404 Not Found\r\n");
     }
-
+    FILE *arq = fopen(tokens[1], "rb");
     fileSize = findFileSize(arq);
   
     sds resposta = sdsnew("HTTP/1.1 200 OK\r\n");
     
+    resposta = sdscatprintf(resposta, "Content-Length: %d\r\n", fileSize);
 
     sds *type = sdssplitlen(tokens[1], sdslen(tokens[1]), ".", 1, &aux);
 
@@ -164,27 +169,36 @@ char* tratahttp(char *menssagem_cliente){
 
     resposta = sdscat(resposta, "Connection: close\r\n\r\n");
 
+    printf("%s\n", resposta);
 
-    char linha[1024];
+    char *linha = malloc(fileSize*sizeof(char));
 
     while(!feof(arq)){
-        fgets(linha, 1024, arq);
-        //linha[strlen(linha)-1] = '\0';
-        printf("%s\n", linha);
-        resposta = sdscat(resposta, linha);
+        fread(linha, 1, fileSize, arq);
     }
     
+    int tamResposta = strlen(resposta);
+
+    memcpy(resposta + tamResposta, linha, fileSize);
+
+    //resposta = sdscat(resposta, linha);
+    if(send(client_sock, resposta, tamResposta + fileSize, 0) < 0){
+        perror("Erro");
+    }
+    close(client_sock);
+    fclose(arq);
+
     return resposta;
 }
 
 int findFileSize(FILE *arq){
 
-    int size;
-    
-    fseek(arq, 0L, SEEK_END);
-    size = ftell(arq);
+    struct stat size;
+    fstat(fileno(arq), &size);
+    return size.st_size;
+}
 
-    rewind(arq);
-
-    return size;
+int file_exist (char *filename){
+  struct stat buffer;   
+  return (stat (filename, &buffer) == 0);
 }

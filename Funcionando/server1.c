@@ -14,14 +14,14 @@
 void *nova_conexao(void *);
 char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
-int file_exist (char *filename);
-void execucao(int sock);
-static void *execucao_thread(void *arg);
+int file_exist(char*);
 
 int main(int argc , char *argv[]){
     //declaracao de variaveis
     int socket_desc , c , *new_sock;
     struct sockaddr_in server , client;
+    
+    
     
     //cria um socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -43,76 +43,87 @@ int main(int argc , char *argv[]){
     puts("ligacao feita");
 
     //seta o socket para aceitar conexoes
-    listen(socket_desc , 10);
+    listen(socket_desc , 3);
 
     puts("Esperando por conexoes...");
     c = sizeof(struct sockaddr_in);
-    
-
-    int *client_sock;
-    pthread_t threadID; //declaração da thread
-    
+  
     while(1){
-        client_sock = (int *) malloc(sizeof(int));
-        *client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c); /* iptr aceita a escuta do cliente */
-        pthread_create(&threadID, NULL, &execucao_thread, client_sock);
+        int client_sock;
+        char *resposta;
+        //aceita uma nova conexão e atribui ao client_sock[i] o endereço do socket onde ocorrerá a comunicação
+        if( client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c) ){
+            puts("Conexao aceita");
+        }
+
+        if (client_sock < 0){
+            perror("Falhou");
+            return 1;
+        }
+
+        int read_size;
+        char *messagem , *menssagem_cliente; //variaveis que serao utilizadas na troca de mensagens
+    
+        messagem = calloc(sizeof(char), 2000);
+        menssagem_cliente = calloc(sizeof(char), 2000);
+
+        if( (read_size = recv(client_sock , menssagem_cliente , 2000 , 0)) > 0 ){ //escuta no sock para receber msg do cliente
+            menssagem_cliente[read_size]='\0';
+            printf("%s\n", menssagem_cliente);
+
+            printf("------------------Resposta-----------------------\n");
+
+            resposta = tratahttp(menssagem_cliente, client_sock);
+            printf("--------------------------------------------------\n");
+
+        }
+
+        if(read_size == 0){  //identifica se o cliente ainda está conectado
+            puts("Cliente desconectado");
+            fflush(stdout);
+        }
+        else if(read_size == -1){ //identifica se houve erro ao receber a mensagem do cliente
+            perror("Recebimento falhou");
+        }
+        
+        puts("conexao encerrada");
+       
+
     }
+
+    
 
     return 0;
 }
 
-static void *execucao_thread(void *arg){
-    int sock;
+char* tratahttp(char *menssagem_cliente, int client_sock){
 
-    sock = *((int *) arg);
-    pthread_detach(pthread_self());
-    execucao(sock);
-    close(sock);
-
-    return NULL;
-}
-
-void execucao(int sock){
-
-    int read_size;
-    char menssagem_cliente[2000];
-    sds resposta;
-    if( (read_size = recv(sock , menssagem_cliente , 2000 , 0)) < 0 ){ //escuta no sock para receber msg do cliente
-       perror("falha ao receber dados do cliente");
-    }
-    menssagem_cliente[read_size]='\0';
-    printf("%s\n", menssagem_cliente);
-
-    printf("------------------Resposta-----------------------\n");
-    
     int tokens_size;
     int aux, fileSize, type_size;
 
     sds xablau = sdsnew(menssagem_cliente);
     sds *tokens = sdssplitlen(xablau, sdslen(xablau), " ", 1, &tokens_size);
-
+    
     if(strcmp("GET", tokens[0]) != 0){
-        resposta = sdsnew("HTTP/1.1 501 Not Implemented\r\n");
-        send(sock, resposta, strlen(resposta), 0);
+        return sdsnew("HTTP/1.1 501 Not Implemented\r\n");
     }
-
+    
     sds *tipo = sdssplitlen(tokens[2], sdslen(tokens[2]), "\r\n", 1, &aux);
 
     if(strcmp("HTTP/1.1", tipo[0]) != 0){
-        resposta = sdsnew("HTTP/1.1 505 HTTP Version Not Supported\r\n");
-        send(sock, resposta, strlen(resposta), 0);
+        return sdsnew("HTTP/1.1 505 HTTP Version Not Supported\r\n");
     }
     sdstrim(tokens[1], "/");
 
+    
+     
     if (!file_exist(tokens[1])){
-       resposta = sdsnew("HTTP/1.1 404 Not Found\r\n");
-       send(sock, resposta, strlen(resposta), 0);
+        return sdsnew("HTTP/1.1 404 Not Found\r\n");
     }
-
     FILE *arq = fopen(tokens[1], "rb");
     fileSize = findFileSize(arq);
-
-    resposta = sdsnew("HTTP/1.1 200 OK\r\n");
+  
+    sds resposta = sdsnew("HTTP/1.1 200 OK\r\n");
     
     resposta = sdscatprintf(resposta, "Content-Length: %d\r\n", fileSize);
 
@@ -158,20 +169,26 @@ void execucao(int sock){
     resposta = sdscat(resposta, "Connection: close\r\n\r\n");
 
     printf("%s\n", resposta);
-    send(sock, resposta, strlen(resposta), 0);
 
+    char *linha = malloc(fileSize*sizeof(char));
 
-    char *buffer = malloc(fileSize*sizeof(char));
-    fread(buffer, 1, fileSize, arq);
-    send(sock, buffer, fileSize, 0);
-    fclose(arq);
-    free(buffer);
+    while(!feof(arq)){
+        fread(linha, 1, fileSize, arq);
+    }
     
-    printf("------------------------FIM--------------------------\n");
+    int tamResposta = strlen(resposta);
 
-    return;
+    memcpy(resposta + tamResposta, linha, fileSize);
+
+    //resposta = sdscat(resposta, linha);
+    if(send(client_sock, resposta, tamResposta + fileSize, 0) < 0){
+        perror("Erro");
+    }
+    close(client_sock);
+    fclose(arq);
+
+    return resposta;
 }
-
 
 int findFileSize(FILE *arq){
 
@@ -179,6 +196,7 @@ int findFileSize(FILE *arq){
     fstat(fileno(arq), &size);
     return size.st_size;
 }
+
 int file_exist (char *filename){
   struct stat buffer;   
   return (stat (filename, &buffer) == 0);
