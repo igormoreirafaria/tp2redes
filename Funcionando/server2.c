@@ -12,15 +12,16 @@
 #include"sdsalloc.h"
 
 void *nova_conexao(void *);
+char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
-int file_exist(char*);
+int file_exist (char *filename);
 void execucao(int sock);
+static void *execucao_thread(void *arg);
+
 int main(int argc , char *argv[]){
     //declaracao de variaveis
     int socket_desc , c , *new_sock;
     struct sockaddr_in server , client;
-    
-    
     
     //cria um socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
@@ -42,31 +43,33 @@ int main(int argc , char *argv[]){
     puts("ligacao feita");
 
     //seta o socket para aceitar conexoes
-    listen(socket_desc , 3);
+    listen(socket_desc , 10);
 
     puts("Esperando por conexoes...");
     c = sizeof(struct sockaddr_in);
-  
-    while(1){
-        int client_sock;
-        //aceita uma nova conexão e atribui ao client_sock[i] o endereço do socket onde ocorrerá a comunicação
-        if( client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c) ){
-            puts("Conexao aceita");
-        }
-
-        if (client_sock < 0){
-            perror("Falhou");
-            return 1;
-        }
-
-        execucao(client_sock);
-        close(client_sock);
-       
-    }
-
     
 
+    int *client_sock;
+    pthread_t threadID; //declaração da thread
+    
+    while(1){
+        client_sock = (int *) malloc(sizeof(int));
+        *client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c); /* iptr aceita a escuta do cliente */
+        pthread_create(&threadID, NULL, &execucao_thread, client_sock);
+    }
+
     return 0;
+}
+
+static void *execucao_thread(void *arg){
+    int sock;
+
+    sock = *((int *) arg);
+    pthread_detach(pthread_self());
+    execucao(sock);
+    close(sock);
+
+    return NULL;
 }
 
 void execucao(int sock){
@@ -169,13 +172,13 @@ void execucao(int sock){
     return;
 }
 
+
 int findFileSize(FILE *arq){
 
     struct stat size;
     fstat(fileno(arq), &size);
     return size.st_size;
 }
-
 int file_exist (char *filename){
   struct stat buffer;   
   return (stat (filename, &buffer) == 0);
