@@ -19,8 +19,7 @@ int findFileSize(FILE *arq);
 int file_exist(char*);
 void lidaComHTTP(int sock);
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]){
     /* master file descriptor list */
     fd_set master;
     /* temp file descriptor list for select() */
@@ -47,16 +46,14 @@ int main(int argc, char *argv[])
     FD_ZERO(&read_fds);
 
     /* get the listener */
-    if((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-    {
+    if((listener = socket(AF_INET, SOCK_STREAM, 0)) == -1){
         perror("Server-socket() error lol!");
         /*just exit lol!*/
         exit(1);
     }
     printf("Server-socket() is OK...\n");
     /*"address already in use" error message */
-    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
-    {
+    if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1){
         perror("Server-setsockopt() error lol!");
         exit(1);
     }
@@ -68,16 +65,14 @@ int main(int argc, char *argv[])
     serveraddr.sin_port = htons(PORT);
     memset(&(serveraddr.sin_zero), '\0', 8);
 
-    if(bind(listener, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1)
-    {
+    if(bind(listener, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1){
         perror("Server-bind() error lol!");
         exit(1);
     }
     printf("Server-bind() is OK...\n");
 
     /* listen */
-    if(listen(listener, 10) == -1)
-    {
+    if(listen(listener, 10) == -1){
         perror("Server-listen() error lol!");
         exit(1);
     }
@@ -89,46 +84,37 @@ int main(int argc, char *argv[])
     fdmax = listener; /* so far, it's this one*/
 
     /* loop */
-    for(;;)
-    {
+    for(;;){
         /* copy it */
         read_fds = master;
 
-        if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1)
-        {
+        if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1){
             perror("Server-select() error lol!");
             exit(1);
         }
         printf("Server-select() is OK...\n");
 
         /*run through the existing connections looking for data to be read*/
-        for(i = 0; i <= fdmax; i++)
-        {
-            if(FD_ISSET(i, &read_fds))
-            { /* we got one... */
-                if(i == listener)
-                {
+        for(i = 0; i <= fdmax; i++){
+            if(FD_ISSET(i, &read_fds)){ /* we got one... */
+                if(i == listener){
                     /* handle new connections */
                     addrlen = sizeof(clientaddr);
-                    if((newfd = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1)
-                    {
+                    if((newfd = accept(listener, (struct sockaddr *)&clientaddr, &addrlen)) == -1){
                         perror("Server-accept() error lol!");
                     }
-                    else
-                    {
+                    else{
                         printf("Server-accept() is OK...\n");
 
                         FD_SET(newfd, &master); /* add to master set */
-                        if(newfd > fdmax)
-                        { /* keep track of the maximum */
+                        if(newfd > fdmax){ /* keep track of the maximum */
                             fdmax = newfd;
                         }
                         printf("%s: New connection from %s on socket %d\n", argv[0], inet_ntoa(clientaddr.sin_addr), newfd);
                         
                     }
                 }
-                else
-                {
+                else{
                     lidaComHTTP(i);
                     /* close it... */
                     close(i);
