@@ -11,5 +11,14 @@ server4:	server4.c	sds.c
 	gcc server4.c sds.c fila.c -o server4
 
 
-clean: server1
+clean1: server1
 	rm -rf server1
+
+clean2: server2
+	rm -rf server2
+
+clean3: server3
+	rm -rf server3
+	
+clean4: server4
+	rm -rf server4

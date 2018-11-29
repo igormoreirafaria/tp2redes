@@ -1,0 +1,62 @@
+Trabalho Prático da Disciplina Redes de Computadores
+
+Por:
+	Anna Luisa Aguilar, Igor Moreira, Igor Vilela
+
+-------------------Compilar-------------------------
+Para compilar abra o terminal e digite:
+
+	Para o server iterativo:
+
+		$ make server1
+
+	Para o server com threads:
+
+		$ make server2
+
+	Para o server com threads e fila:
+
+		$ make server3
+
+	Para o server que usa Select:
+
+		$ make server4
+-------------------------------------------------------
+--------------------Rodar------------------------------
+Para rodar abra o terminal e digite:
+
+	Para o server iterativo:
+
+		$ ./server1
+
+	Para o server com threads:
+
+		$ ./server2
+
+	Para o server com threads e fila:
+
+		$ ./server3
+
+	Para o server que usa Select:
+
+		$ ./server4
+--------------------------------------------------------
+----------------------Limpar-----------------------------
+Para remover arquivos gerados abra o terminal e digite:
+
+	Para o server iterativo:
+
+		$ make clean1
+
+	Para o server com threads:
+
+		$ make clean2
+
+	Para o server com threads e fila:
+
+		$ make clean3
+
+	Para o server que usa Select:
+
+		$ make clean4
+----------------------------------------------------------

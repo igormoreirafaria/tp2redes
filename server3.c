@@ -11,8 +11,9 @@
 #include"sds.h"
 #include"sdsalloc.h"
 #include"fila.h"
+#define PORT 8080
 
-void *nova_conexao(void *);
+
 char *tratahttp(char *menssagem_cliente, int client_sock);
 int findFileSize(FILE *arq);
 int file_exist (char *filename);
@@ -37,7 +38,7 @@ int main(int argc , char *argv[]){
     //criacao do servidor
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( atoi(argv[1]) );
+    server.sin_port = htons( PORT );
 
     //ligando o socket ao servidor
     if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0){
@@ -73,7 +74,7 @@ int main(int argc , char *argv[]){
         Item_fila *i;
         i = novo_item_fila();
         i->sock = client_sock;
-        pthread_t thread[5]; //declaração da thread
+        pthread_t thread[4]; //declaração da thread
         insere(fila, i);
 
         
@@ -81,7 +82,7 @@ int main(int argc , char *argv[]){
          
         desenfilera(fila);
         j++;
-        if (j == 5) j = 0;
+        if (j == 4) j = 0;
     }
     pthread_mutex_destroy(&lock);
     deleta_fila(fila);

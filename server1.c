@@ -10,8 +10,8 @@
 #include <sys/stat.h>
 #include"sds.h"
 #include"sdsalloc.h"
+#define PORT 8080
 
-void *nova_conexao(void *);
 int findFileSize(FILE *arq);
 int file_exist(char*);
 void lidaComHTTP(int sock);
@@ -32,7 +32,7 @@ int main(int argc , char *argv[]){
     //criacao do servidor
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( atoi(argv[1]) );
+    server.sin_port = htons( PORT );
 
     //ligando o socket ao servidor
     if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0){
